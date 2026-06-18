@@ -339,7 +339,6 @@ function initCompare() {
   const compare = $("compare");
   const beforeWrap = $("beforeWrap");
   const handle = $("compareHandle");
-  let dragging = false;
 
   const setPos = (clientX) => {
     const rect = compare.getBoundingClientRect();
@@ -349,19 +348,26 @@ function initCompare() {
     handle.style.left = pct + "%";
   };
 
-  const down = (e) => { dragging = true; setPos(getX(e)); };
-  const move = (e) => { if (dragging) { setPos(getX(e)); e.preventDefault(); } };
-  const up = () => (dragging = false);
-  const getX = (e) => (e.touches ? e.touches[0].clientX : e.clientX);
-
-  // reset to center each open
+  // reset to center on each open
   beforeWrap.style.width = "50%";
   handle.style.left = "50%";
 
-  handle.onmousedown = down; compare.onmousedown = down;
-  handle.ontouchstart = down; compare.ontouchstart = down;
-  window.onmousemove = move; window.ontouchmove = move;
-  window.onmouseup = up; window.ontouchend = up;
+  // Bind drag handlers ONCE, scoped to the compare element only.
+  // Pointer Events + setPointerCapture keeps tracking without any global/
+  // window listeners — so taps on the header buttons are never intercepted.
+  if (compare.dataset.bound) return;
+  compare.dataset.bound = "1";
+
+  let dragging = false;
+  compare.addEventListener("pointerdown", (e) => {
+    dragging = true;
+    try { compare.setPointerCapture(e.pointerId); } catch (_) {}
+    setPos(e.clientX);
+  });
+  compare.addEventListener("pointermove", (e) => { if (dragging) setPos(e.clientX); });
+  const end = () => { dragging = false; };
+  compare.addEventListener("pointerup", end);
+  compare.addEventListener("pointercancel", end);
 }
 
 // ============================================================
