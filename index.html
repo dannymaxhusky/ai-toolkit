@@ -59,6 +59,10 @@
 
     <!-- ===== GENERATE ===== -->
     <div class="cta-wrap">
+      <div class="count-select" id="countSelect" role="group" aria-label="生成数量">
+        <button type="button" class="count-opt" data-count="1">1 张</button>
+        <button type="button" class="count-opt selected" data-count="4">4 张方案</button>
+      </div>
       <button class="generate" id="generateBtn" disabled>
         <span class="generate-label">生成设计方案</span>
         <span class="generate-arrow">→</span>
@@ -90,26 +94,38 @@
   <!-- ===== RESULT MODAL ===== -->
   <div class="result" id="resultModal" hidden>
     <div class="result-head">
+      <button class="result-back" id="resultBack" aria-label="返回" hidden>←</button>
       <span class="result-style" id="resultStyleName">设计方案</span>
       <button class="result-close" id="resultClose" aria-label="关闭">✕</button>
     </div>
 
-    <div class="compare" id="compare">
-      <img class="compare-after" id="afterImg" alt="设计后" />
-      <div class="compare-before-wrap" id="beforeWrap">
-        <img class="compare-before" id="beforeImg" alt="设计前" />
-        <span class="compare-tag tag-before">原图</span>
-      </div>
-      <span class="compare-tag tag-after">设计后</span>
-      <div class="compare-handle" id="compareHandle">
-        <span class="handle-grip">⇆</span>
+    <!-- GRID PANE: the 4-up variations -->
+    <div class="pane" id="gridPane" hidden>
+      <p class="grid-hint">点击任意方案查看「设计前 / 后」对比</p>
+      <div class="result-grid" id="resultGrid"></div>
+      <div class="result-actions">
+        <button class="btn btn-solid" id="againBtnGrid">换一种风格</button>
       </div>
     </div>
-    <p class="compare-hint">← 左右拖动对比 →</p>
 
-    <div class="result-actions">
-      <a class="btn btn-ghost" id="downloadBtn" download="reroom-design.png">下载图片</a>
-      <button class="btn btn-solid" id="againBtn">换一种风格</button>
+    <!-- COMPARE PANE: before/after slider for one chosen variation -->
+    <div class="pane" id="comparePane" hidden>
+      <div class="compare" id="compare">
+        <img class="compare-after" id="afterImg" alt="设计后" />
+        <div class="compare-before-wrap" id="beforeWrap">
+          <img class="compare-before" id="beforeImg" alt="设计前" />
+          <span class="compare-tag tag-before">原图</span>
+        </div>
+        <span class="compare-tag tag-after">设计后</span>
+        <div class="compare-handle" id="compareHandle">
+          <span class="handle-grip">⇆</span>
+        </div>
+      </div>
+      <p class="compare-hint">← 左右拖动对比 →</p>
+      <div class="result-actions">
+        <a class="btn btn-ghost" id="downloadBtn" download="reroom-design.png">下载图片</a>
+        <button class="btn btn-solid" id="againBtn">换一种风格</button>
+      </div>
     </div>
   </div>
 

@@ -37,6 +37,38 @@ const STYLES = [
     swatch: "linear-gradient(120deg,#E5DDCF,#B7A98F)",
     desc: "低矮木家具、天然材质、素雅大地色，宁静禅意。",
   },
+  {
+    key: "luxury",
+    name: "轻奢风",
+    en: "Modern Luxury",
+    glyph: "◈",
+    swatch: "linear-gradient(120deg,#C9BBA0,#6E5B40)",
+    desc: "大理石、黄铜、丝绒，沉稳高级，金色点缀。",
+  },
+  {
+    key: "midcentury",
+    name: "中古风",
+    en: "Mid-Century",
+    glyph: "◉",
+    swatch: "linear-gradient(120deg,#D9A86C,#7A5230)",
+    desc: "胡桃木、细腿家具、复古撞色，经典摩登。",
+  },
+  {
+    key: "french",
+    name: "法式",
+    en: "French Parisian",
+    glyph: "❀",
+    swatch: "linear-gradient(120deg,#EAD9D2,#C99CA0)",
+    desc: "石膏线、人字拼地板、复古家具，优雅浪漫。",
+  },
+  {
+    key: "bohemian",
+    name: "波西米亚",
+    en: "Bohemian",
+    glyph: "❖",
+    swatch: "linear-gradient(120deg,#D8A488,#9A6A4A)",
+    desc: "藤编、织物、绿植、大地色，自由随性。",
+  },
 ];
 
 const LOADING_MSGS = [
@@ -48,7 +80,7 @@ const LOADING_MSGS = [
 ];
 
 // ---- state ----
-const state = { imageB64: null, mimeType: "image/jpeg", previewUrl: null, style: null };
+const state = { imageB64: null, mimeType: "image/jpeg", previewUrl: null, style: null, count: 4 };
 
 // ---- elements ----
 const $ = (id) => document.getElementById(id);
@@ -90,6 +122,16 @@ function selectStyle(key, card) {
   card.classList.add("selected");
   refreshCTA();
 }
+
+// ---- count selector ----
+document.querySelectorAll(".count-opt").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    state.count = parseInt(btn.dataset.count, 10) || 1;
+    document.querySelectorAll(".count-opt").forEach((b) => b.classList.remove("selected"));
+    btn.classList.add("selected");
+    refreshCTA();
+  });
+});
 
 // ============================================================
 // Image capture + client-side resize (keeps payload small)
@@ -141,7 +183,7 @@ function resizeImage(file, maxDim, quality) {
 function refreshCTA() {
   const ready = state.imageB64 && state.style;
   generateBtn.disabled = !ready;
-  if (ready) ctaHint.textContent = "约需 20–40 秒生成";
+  if (ready) ctaHint.textContent = state.count > 1 ? `生成 ${state.count} 个方案 · 约需 30–60 秒` : "约需 20–40 秒生成";
   else if (!state.imageB64) ctaHint.textContent = "先拍一张照片，再选一种风格";
   else ctaHint.textContent = "选择一种装修风格";
 }
@@ -159,7 +201,7 @@ async function startGeneration() {
     const kick = await fetch("/.netlify/functions/redesign-background", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: jobId, style: state.style, image: state.imageB64, mimeType: state.mimeType }),
+      body: JSON.stringify({ id: jobId, style: state.style, image: state.imageB64, mimeType: state.mimeType, count: state.count }),
     });
     // Background functions reply 202. Anything 5xx/404 means it isn't deployed.
     if (kick.status >= 400 && kick.status !== 202) {
@@ -176,7 +218,7 @@ async function startGeneration() {
 
 async function pollStatus(jobId) {
   const started = Date.now();
-  const maxMs = 120000;
+  const maxMs = 180000;
   let msgIdx = 0;
 
   const tick = setInterval(() => {
@@ -218,6 +260,7 @@ async function pollStatus(jobId) {
 // Overlay
 // ============================================================
 function showOverlay() {
+  $("overlayTitle").textContent = state.count > 1 ? `正在生成 ${state.count} 个设计方案…` : "正在重新设计你的空间…";
   overlayMsg.textContent = LOADING_MSGS[0];
   overlayTimer.textContent = "0s";
   overlay.hidden = false;
@@ -230,18 +273,58 @@ function hideOverlay() { overlay.hidden = true; }
 function showResult(row) {
   const meta = STYLES.find((s) => s.key === row.style);
   $("resultStyleName").textContent = meta ? meta.name : "设计方案";
-  $("afterImg").src = row.result_url;
-  $("beforeImg").src = state.previewUrl || row.original_url || row.result_url;
-  $("downloadBtn").href = row.result_url;
+  const urls = Array.isArray(row.results) && row.results.length
+    ? row.results
+    : row.result_url ? [row.result_url] : [];
+  if (!urls.length) return;
   resultModal.hidden = false;
+  $("resultBack").hidden = true;
+  if (urls.length > 1) {
+    buildGrid(urls);
+    showPane("grid");
+  } else {
+    openCompare(urls[0]);
+  }
+}
+
+function buildGrid(urls) {
+  const grid = $("resultGrid");
+  grid.innerHTML = "";
+  urls.forEach((u, i) => {
+    const cell = document.createElement("button");
+    cell.type = "button";
+    cell.className = "grid-cell";
+    cell.innerHTML = `<img src="${u}" alt="方案 ${i + 1}" loading="lazy" /><span class="cell-no">方案 ${i + 1}</span>`;
+    cell.addEventListener("click", () => {
+      openCompare(u);
+      $("resultBack").hidden = false;
+    });
+    grid.appendChild(cell);
+  });
+}
+
+function openCompare(url) {
+  $("afterImg").src = url;
+  $("beforeImg").src = state.previewUrl || url;
+  $("downloadBtn").href = url;
+  showPane("compare");
   initCompare();
 }
 
-$("resultClose").addEventListener("click", () => (resultModal.hidden = true));
-$("againBtn").addEventListener("click", () => {
+function showPane(which) {
+  $("gridPane").hidden = which !== "grid";
+  $("comparePane").hidden = which !== "compare";
+}
+
+function againReset() {
   resultModal.hidden = true;
   document.getElementById("styleSection").scrollIntoView({ behavior: "smooth" });
-});
+}
+
+$("resultBack").addEventListener("click", () => { showPane("grid"); $("resultBack").hidden = true; });
+$("resultClose").addEventListener("click", () => (resultModal.hidden = true));
+$("againBtn").addEventListener("click", againReset);
+$("againBtnGrid").addEventListener("click", againReset);
 
 function initCompare() {
   const compare = $("compare");

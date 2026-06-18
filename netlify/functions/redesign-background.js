@@ -55,7 +55,44 @@ const STYLES = {
       "a muted earthy palette of beige, clay and soft black, handmade ceramics, paper-lantern lighting, " +
       "minimal serene composition with negative space. Calm wabi-sabi atmosphere.",
   },
+  luxury: {
+    name: "Modern Luxury",
+    prompt:
+      "Modern luxury (quiet glam) style: rich materials — marble, brushed brass, smoked glass and velvet; " +
+      "a deep sophisticated palette of charcoal, taupe and warm gold accents; plush low seating, sculptural statement lighting, " +
+      "polished reflective surfaces; refined and elegant. Five-star hotel suite aesthetic.",
+  },
+  midcentury: {
+    name: "Mid-Century Modern",
+    prompt:
+      "Mid-century modern style: warm walnut wood, tapered-leg furniture, organic curved shapes, " +
+      "a retro palette of mustard yellow, teal and burnt orange, iconic 1950s–60s design pieces, globe pendant lights. " +
+      "Palm Springs aesthetic.",
+  },
+  french: {
+    name: "French Parisian",
+    prompt:
+      "French Parisian style: ornate wall moldings and herringbone parquet floors, elegant antique and vintage furniture, " +
+      "a soft muted palette of cream, dusty rose and grey, gilded mirrors, a delicate chandelier, refined romantic atmosphere. " +
+      "Haussmann apartment aesthetic.",
+  },
+  bohemian: {
+    name: "Bohemian",
+    prompt:
+      "Bohemian (boho) style: layered eclectic textiles, rattan and natural-fiber furniture, abundant trailing plants, " +
+      "macrame and woven wall hangings, warm earthy terracotta and ochre tones, vintage patterned rugs, " +
+      "a relaxed free-spirited mix of patterns. Warm artisanal atmosphere.",
+  },
 };
+
+// Each generated variation gets a different creative direction so the
+// 4-up grid shows genuinely distinct options of the same room + style.
+const VARIATIONS = [
+  "Design direction A: a balanced, timeless arrangement with a soft neutral palette and bright natural daylight.",
+  "Design direction B: a warmer, cozier mood with richer accent colors, layered textiles and soft ambient evening lighting.",
+  "Design direction C: an alternative furniture layout featuring one bold statement piece and dramatic directional lighting.",
+  "Design direction D: a lighter, airier, more open feel with abundant greenery and a minimal, decluttered composition.",
+];
 
 exports.handler = async (event) => {
   let body;
@@ -66,6 +103,7 @@ exports.handler = async (event) => {
   }
 
   const { id, style, image, mimeType } = body;
+  const count = Math.min(Math.max(parseInt(body.count, 10) || 1, 1), 4);
   const env = readEnv();
 
   if (!id || !style || !image) return { statusCode: 400, body: "missing fields" };
@@ -79,9 +117,19 @@ exports.handler = async (event) => {
 
   try {
     const originalUrl = await uploadImage(env, `${id}/original.jpg`, Buffer.from(image, "base64"), mimeType || "image/jpeg");
-    const resultB64 = await geminiRedesign(env, image, mimeType || "image/jpeg", style);
-    const resultUrl = await uploadImage(env, `${id}/result.png`, Buffer.from(resultB64, "base64"), "image/png");
-    await dbPatch(env, id, { status: "done", original_url: originalUrl, result_url: resultUrl });
+
+    // Generate all variations in parallel; tolerate partial failures.
+    const settled = await Promise.allSettled(
+      Array.from({ length: count }, (_, i) => generateAndStore(env, id, image, mimeType || "image/jpeg", style, i))
+    );
+    const urls = settled.filter((s) => s.status === "fulfilled").map((s) => s.value);
+
+    if (!urls.length) {
+      const firstErr = settled.find((s) => s.status === "rejected");
+      throw new Error(firstErr ? String(firstErr.reason.message || firstErr.reason) : "all variations failed");
+    }
+
+    await dbPatch(env, id, { status: "done", original_url: originalUrl, result_url: urls[0], results: urls });
   } catch (err) {
     console.error("redesign failed:", err);
     await dbPatch(env, id, { status: "error", error: String(err.message || err).slice(0, 480) });
@@ -90,10 +138,17 @@ exports.handler = async (event) => {
   return { statusCode: 202, body: "accepted" };
 };
 
+// ---------------------------------------------------------------- one variation
+async function generateAndStore(env, id, base64, mimeType, styleKey, idx) {
+  const resultB64 = await geminiRedesign(env, base64, mimeType, styleKey, idx);
+  return uploadImage(env, `${id}/v${idx}.png`, Buffer.from(resultB64, "base64"), "image/png");
+}
+
 // ---------------------------------------------------------------- Gemini
-async function geminiRedesign(env, base64, mimeType, styleKey) {
+async function geminiRedesign(env, base64, mimeType, styleKey, idx = 0) {
   const style = STYLES[styleKey] || STYLES.minimalist;
-  const prompt = `${BASE_INSTRUCTION}\n\nTarget style — ${style.name}: ${style.prompt}`;
+  const variation = VARIATIONS[idx % VARIATIONS.length];
+  const prompt = `${BASE_INSTRUCTION}\n\nTarget style — ${style.name}: ${style.prompt}\n\n${variation}`;
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${env.geminiKey}`;
 
   const res = await fetch(url, {

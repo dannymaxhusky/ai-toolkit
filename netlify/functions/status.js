@@ -9,7 +9,7 @@ exports.handler = async (event) => {
 
   try {
     const res = await fetch(
-      `${supabaseUrl}/rest/v1/redesigns?id=eq.${id}&select=id,style,status,result_url,original_url,error`,
+      `${supabaseUrl}/rest/v1/redesigns?id=eq.${id}&select=id,style,status,result_url,results,original_url,error`,
       { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } }
     );
     const rows = await res.json();

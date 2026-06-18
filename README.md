@@ -69,7 +69,7 @@ netlify dev                  # http://localhost:8888
 
 ---
 
-## 四种装修风格
+## 八种装修风格
 
 | 风格 | 说明 |
 |---|---|
@@ -77,9 +77,22 @@ netlify dev                  # http://localhost:8888
 | 北欧风 Scandinavian | 浅色橡木、白墙、温暖织物、绿植 |
 | 工业风 Industrial Loft | 裸砖、水泥、黑色金属、皮革、爱迪生灯泡 |
 | 日式侘寂 Japandi | 低矮木家具、天然材质、素雅大地色 |
+| 轻奢风 Modern Luxury | 大理石、黄铜、丝绒、金色点缀，五星级酒店感 |
+| 中古风 Mid-Century Modern | 胡桃木、细腿家具、复古撞色 |
+| 法式 French Parisian | 石膏线、人字拼地板、复古家具，优雅浪漫 |
+| 波西米亚 Bohemian | 藤编、织物、绿植、大地色，自由随性 |
 
 提示词位于 [`netlify/functions/redesign-background.js`](netlify/functions/redesign-background.js) 顶部的 `STYLES`，
 可自由增删风格（前端 `assets/app.js` 的 `STYLES` 数组需保持 key 一致）。
+
+## 多方案网格
+
+可在生成前选择「1 张」或「4 张方案」。选 4 张时，后台函数会**并行**调用 4 次 Gemini，
+每次套用不同的「创意方向」（见 `VARIATIONS`：中性日光 / 暖色夜晚 / 大胆布局 / 通透绿植），
+得到同一房间同一风格下 4 个不同的设计，前端以 2×2 网格展示，点任意一张进入「设计前 / 后」对比。
+所有结果 URL 存入 `redesigns.results`（jsonb 数组），封面存 `result_url`。
+
+> 成本提醒：4 张方案 = 4 次图像生成，费用约为单张的 4 倍。
 
 ---
 

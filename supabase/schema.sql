@@ -9,11 +9,15 @@ create table if not exists public.redesigns (
   style        text not null,
   status       text not null default 'processing',  -- processing | done | error
   original_url text,
-  result_url   text,
+  result_url   text,                                 -- cover image (first variation)
+  results      jsonb not null default '[]'::jsonb,   -- all variation image URLs
   error        text,
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now()
 );
+
+-- for upgrading an older table created before multi-variation support
+alter table public.redesigns add column if not exists results jsonb not null default '[]'::jsonb;
 
 create index if not exists redesigns_created_idx on public.redesigns (created_at desc);
 

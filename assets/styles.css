@@ -268,6 +268,49 @@ body {
 .btn-solid { background: var(--ink); color: #FBF8F2; border-color: var(--ink); }
 .btn-solid:hover { background: var(--clay-deep); border-color: var(--clay-deep); }
 
+/* ---------- count selector ---------- */
+.count-select {
+  display: flex; gap: 5px; margin-bottom: 11px;
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 100px; padding: 5px;
+  box-shadow: var(--shadow);
+}
+.count-opt {
+  flex: 1; border: none; background: transparent; cursor: pointer;
+  font-family: var(--serif); font-size: 15px; color: var(--ink-soft);
+  padding: 10px; border-radius: 100px; transition: background .2s, color .2s;
+}
+.count-opt.selected { background: var(--ink); color: #FBF8F2; }
+
+/* ---------- result panes ---------- */
+.result-back {
+  width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line);
+  background: var(--card); font-size: 18px; cursor: pointer; color: var(--ink);
+}
+.result-head .result-style { flex: 1; text-align: center; }
+.pane { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+#gridPane { overflow-y: auto; }
+.grid-hint { text-align: center; font-size: 13px; color: var(--ink-soft); margin-bottom: 14px; }
+.result-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  margin-bottom: 18px;
+}
+.grid-cell {
+  position: relative; aspect-ratio: 4 / 3; padding: 0; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 16px; overflow: hidden;
+  background: #1c1814; transition: transform .18s, box-shadow .18s;
+}
+.grid-cell:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
+.grid-cell:active { transform: scale(.98); }
+.grid-cell img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cell-no {
+  position: absolute; left: 10px; bottom: 10px;
+  font-size: 11px; letter-spacing: .08em; font-weight: 600; color: #FBF8F2;
+  background: rgba(33,28,22,.55); backdrop-filter: blur(6px);
+  padding: 5px 10px; border-radius: 100px;
+}
+#comparePane .result-actions { margin-top: 14px; }
+
 /* ---------- reveal animation ---------- */
 [data-reveal] { opacity: 0; transform: translateY(14px); animation: reveal .7s cubic-bezier(.2,.7,.2,1) forwards; }
 [data-reveal]:nth-child(1) { animation-delay: .05s; }
