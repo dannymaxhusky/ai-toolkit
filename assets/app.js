@@ -418,9 +418,12 @@ function hideOverlay() { overlay.hidden = true; }
 // ============================================================
 // Result + before/after slider
 // ============================================================
+let compareBefore = null; // "before" image url for the compare slider
+
 function showResult(row) {
   const meta = STYLES.find((s) => s.key === row.style);
   $("resultStyleName").textContent = meta ? meta.name : "设计方案";
+  compareBefore = state.previewUrl;
   // results may be strings (older jobs) or { url, label } objects
   let items = (Array.isArray(row.results) && row.results.length
     ? row.results
@@ -456,7 +459,7 @@ function buildGrid(items) {
 
 function openCompare(url) {
   $("afterImg").src = url;
-  $("beforeImg").src = state.previewUrl || url;
+  $("beforeImg").src = compareBefore || state.previewUrl || url;
   $("downloadBtn").href = url;
   showPane("compare");
   initCompare();
@@ -524,16 +527,28 @@ async function loadRecent() {
     const strip = $("recentStrip");
     strip.innerHTML = "";
     rows.forEach((r) => {
-      if (!r.result_url) return;
-      const img = document.createElement("img");
-      img.src = r.result_url;
-      img.loading = "lazy";
-      img.alt = "设计方案";
-      img.addEventListener("click", () => window.open(r.result_url, "_blank"));
-      strip.appendChild(img);
+      const url = r.url || r.result_url; // tolerate old entries
+      if (!url) return;
+      const cell = document.createElement("button");
+      cell.type = "button";
+      cell.className = "recent-cell";
+      cell.innerHTML = `<img src="${url}" loading="lazy" alt="${r.label || "设计"}" />` +
+        (r.label ? `<span class="recent-label">${r.label}</span>` : "");
+      cell.addEventListener("click", () => reopenFromRecent({ ...r, url }));
+      strip.appendChild(cell);
     });
     $("recentSection").hidden = false;
   } catch (_) { /* silent */ }
+}
+
+// reopen a past result straight from history — no regeneration
+function reopenFromRecent(r) {
+  const meta = STYLES.find((s) => s.key === r.style);
+  $("resultStyleName").textContent = r.label || (meta ? meta.name : "设计方案");
+  compareBefore = r.original_url || null;
+  resultModal.hidden = false;
+  $("resultBack").hidden = true;
+  openCompare(r.url);
 }
 
 loadRecent();

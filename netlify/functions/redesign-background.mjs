@@ -158,7 +158,8 @@ export default async (req) => {
     if (!results.length) throw new Error("no images produced");
 
     await jobs.setJSON(id, { ...base, status: "done", progress: 100, results, result_url: results[0].url });
-    await pushRecent({ style: style || "tiles", result_url: results[0].url, ts: Date.now() });
+    const originalRel = `/.netlify/functions/img?key=${encodeURIComponent("src/" + id)}`;
+    await pushRecent(results, { style: style || null, original_url: originalRel, ts: Date.now() });
   } catch (err) {
     console.error("redesign failed:", err);
     await jobs.setJSON(id, { ...base, status: "error", error: String(err.message || err).slice(0, 480) });
@@ -324,12 +325,18 @@ async function geminiFloorSwap(geminiKey, roomB64, roomMime, tileB64, tileMime) 
 }
 
 // ---------------------------------------------------------------- lookbook
-async function pushRecent(item) {
+// store EVERY result image (designs + each tile combo) as its own history
+// entry so the lookbook shows the full generation history and any image can
+// be reopened without regenerating.
+async function pushRecent(results, info) {
   try {
-    const meta = metaStore();
-    const list = (await meta.get("recent", { type: "json" })) || [];
-    list.unshift(item);
-    await meta.setJSON("recent", list.slice(0, 12));
+    const store = metaStore();
+    const list = (await store.get("recent", { type: "json" })) || [];
+    const entries = results.map((r) => ({
+      url: r.url, label: r.label || "", style: info.style, original_url: info.original_url, ts: info.ts,
+    }));
+    const merged = [...entries, ...(Array.isArray(list) ? list : [])].slice(0, 30);
+    await store.setJSON("recent", merged);
   } catch (e) {
     console.error("pushRecent failed:", e);
   }
