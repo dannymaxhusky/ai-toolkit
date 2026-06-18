@@ -80,7 +80,7 @@ const LOADING_MSGS = [
 ];
 
 // ---- state ----
-const state = { imageB64: null, mimeType: "image/jpeg", previewUrl: null, style: null, count: 4 };
+const state = { imageB64: null, mimeType: "image/jpeg", previewUrl: null, style: null, count: 4, provider: "google" };
 
 // ---- elements ----
 const $ = (id) => document.getElementById(id);
@@ -124,10 +124,20 @@ function selectStyle(key, card) {
 }
 
 // ---- count selector ----
-document.querySelectorAll(".count-opt").forEach((btn) => {
+document.querySelectorAll("#countSelect .count-opt").forEach((btn) => {
   btn.addEventListener("click", () => {
     state.count = parseInt(btn.dataset.count, 10) || 1;
-    document.querySelectorAll(".count-opt").forEach((b) => b.classList.remove("selected"));
+    document.querySelectorAll("#countSelect .count-opt").forEach((b) => b.classList.remove("selected"));
+    btn.classList.add("selected");
+    refreshCTA();
+  });
+});
+
+// ---- provider (model) selector ----
+document.querySelectorAll("#providerSelect .count-opt").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    state.provider = btn.dataset.provider || "google";
+    document.querySelectorAll("#providerSelect .count-opt").forEach((b) => b.classList.remove("selected"));
     btn.classList.add("selected");
     refreshCTA();
   });
@@ -210,7 +220,7 @@ async function startGeneration() {
     const kick = await fetch("/.netlify/functions/redesign-background", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: jobId, style: state.style, count: state.count }),
+      body: JSON.stringify({ id: jobId, style: state.style, count: state.count, provider: state.provider }),
     });
     // Background functions reply 202. Anything 5xx/404 means it isn't deployed.
     if (kick.status >= 400 && kick.status !== 202) {
@@ -228,16 +238,22 @@ async function startGeneration() {
 async function pollStatus(jobId) {
   const started = Date.now();
   const maxMs = 180000;
+  // expected duration drives the time-based creep (Seedance polls remote tasks, so slower)
+  const expectedMs = (state.provider === "seedance" ? 70000 : 42000) * (state.count > 1 ? 1.5 : 1);
   let msgIdx = 0;
+  let serverProgress = 0;
 
   const tick = setInterval(() => {
     const secs = Math.floor((Date.now() - started) / 1000);
     overlayTimer.textContent = secs + "s";
+    // creep toward 92% based on elapsed time, but never below real server progress
+    const creep = Math.min(92, (Date.now() - started) / expectedMs * 92);
+    setProgress(Math.max(creep, serverProgress));
     if (secs > 0 && secs % 6 === 0) {
       msgIdx = (msgIdx + 1) % LOADING_MSGS.length;
       overlayMsg.textContent = LOADING_MSGS[msgIdx];
     }
-  }, 1000);
+  }, 250);
 
   async function check() {
     if (Date.now() - started > maxMs) {
@@ -248,10 +264,11 @@ async function pollStatus(jobId) {
     try {
       const res = await fetch(`/.netlify/functions/status?id=${jobId}`);
       const row = await res.json();
+      if (typeof row.progress === "number") serverProgress = row.progress;
       if (row.status === "done" && row.result_url) {
-        clearInterval(tick); hideOverlay();
-        showResult(row);
-        loadRecent();
+        clearInterval(tick);
+        setProgress(100);
+        setTimeout(() => { hideOverlay(); showResult(row); loadRecent(); }, 450);
         return;
       }
       if (row.status === "error") {
@@ -265,13 +282,21 @@ async function pollStatus(jobId) {
   setTimeout(check, 3000);
 }
 
+function setProgress(pct) {
+  const p = Math.max(0, Math.min(100, Math.round(pct)));
+  $("progressFill").style.width = p + "%";
+  $("progressPct").textContent = p + "%";
+}
+
 // ============================================================
 // Overlay
 // ============================================================
 function showOverlay() {
-  $("overlayTitle").textContent = state.count > 1 ? `正在生成 ${state.count} 个设计方案…` : "正在重新设计你的空间…";
-  overlayMsg.textContent = LOADING_MSGS[0];
+  const modelName = state.provider === "seedance" ? "Seedance" : "Google";
+  $("overlayTitle").textContent = (state.count > 1 ? `正在生成 ${state.count} 个设计方案…` : "正在重新设计你的空间…");
+  overlayMsg.textContent = `${modelName} · ${LOADING_MSGS[0]}`;
   overlayTimer.textContent = "0s";
+  setProgress(0);
   overlay.hidden = false;
 }
 function hideOverlay() { overlay.hidden = true; }

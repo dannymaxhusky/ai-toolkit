@@ -35,13 +35,23 @@
 只有一步配置 + 部署：
 
 ### 1. Netlify 环境变量
-站点 **Site settings → Environment variables**，添加一个变量：
+站点 **Site settings → Environment variables**：
 
-| 变量名 | 值 |
-|---|---|
-| `GEMINI_API_KEY` | Google AI Studio 密钥（**需已开通付费**，图像模型无免费额度） |
+| 变量名 | 是否必填 | 值 |
+|---|---|---|
+| `GEMINI_API_KEY` | Google 模型必填 | Google AI Studio 密钥（**需已开通付费**） |
+| `SEEDANCE_API_KEY` | Seedance 模型必填 | seedance2.ai 的 Bearer 令牌（`sk_live_...`） |
 
-> 不需要数据库 URL、不需要任何密钥——Netlify Blobs 会自动开通。
+可选(仅当 seedance2.ai 的图片接口与默认不符时再设)：
+`SEEDANCE_API_BASE`（默认 `https://api.seedance2.ai`）、
+`SEEDANCE_IMAGE_ENDPOINT`（默认 `/v1/images/generations`）、
+`SEEDANCE_IMAGE_MODEL`（默认 `seedream-4-0`）。
+
+> 只用 Google 就只配 `GEMINI_API_KEY`；两个模型都想要就两个都配。数据库无需配置——Netlify Blobs 自动开通。
+
+> ⚠️ **Seedance 接口说明**：`api.seedance2.ai` 公开文档只有**视频**接口,图片(Seedream)接口未公开。
+> 代码按其视频接口的模式（异步 `taskId` + 轮询 `/v1/tasks/:id`）做了适配,并把字段做成可用环境变量覆盖。
+> 若你的账号图片接口路径/模型名不同,改上面三个可选变量即可,无需改代码；真实报错也会显示在失败提示里。
 
 ### 2. 部署
 - 在 Netlify **Add new site → Import from Git**，选择本仓库。
@@ -90,6 +100,11 @@ netlify dev                  # http://localhost:8888 （本地也会模拟 Blobs
 得到同一房间同一风格下 4 个不同的设计，前端以 2×2 网格展示，点任意一张进入「设计前 / 后」对比。
 
 > 成本提醒：4 张方案 = 4 次图像生成，费用约为单张的 4 倍。
+
+## 模型选择 & 进度条
+
+生成前可切换 **Google（Gemini）** 或 **Seedance（Seedream 图生图）**,后端按所选 provider 走不同接口。
+生成过程中弹窗显示**进度条**:随耗时平滑推进,并以后台实时进度(每完成一张方案)为下限,完成时填满到 100%。
 
 ---
 

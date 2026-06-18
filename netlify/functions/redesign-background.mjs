@@ -8,9 +8,12 @@
  *
  * Generated image URLs point at the `img` function, which streams the blob.
  *
- * Required env var (Netlify -> Site settings -> Environment):
- *   GEMINI_API_KEY   (Google AI Studio key with billing enabled)
+ * Env vars (Netlify -> Site settings -> Environment):
+ *   GEMINI_API_KEY     (Google path; AI Studio key with billing enabled)
+ *   SEEDANCE_API_KEY   (Seedance path; Bearer token sk_live_... from seedance2.ai)
+ * Optional Seedance overrides: SEEDANCE_API_BASE, SEEDANCE_IMAGE_ENDPOINT, SEEDANCE_IMAGE_MODEL
  *
+ * The user picks the model per generation (provider = "google" | "seedance").
  * No database account needed — Netlify Blobs is provisioned automatically.
  */
 import { getStore } from "@netlify/blobs";
@@ -53,17 +56,22 @@ export default async (req) => {
 
   const { id, style } = body;
   const count = Math.min(Math.max(parseInt(body.count, 10) || 1, 1), 4);
+  const provider = body.provider === "seedance" ? "seedance" : "google";
   const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY || process.env.GOOGLE_API_KEY;
+  const seedanceKey = process.env.SEEDANCE_API_KEY;
 
   if (!id || !style) return new Response("missing fields", { status: 400 });
 
   const jobs = jobsStore();
-  if (!geminiKey) {
-    await jobs.setJSON(id, { style, status: "error", error: "GEMINI_API_KEY not set on the site" });
+  const fail = async (msg) => {
+    await jobs.setJSON(id, { style, provider, status: "error", error: msg });
     return new Response("not configured", { status: 500 });
-  }
+  };
+  if (provider === "google" && !geminiKey) return fail("GEMINI_API_KEY not set on the site");
+  if (provider === "seedance" && !seedanceKey) return fail("SEEDANCE_API_KEY not set on the site");
 
-  await jobs.setJSON(id, { style, status: "processing", createdAt: Date.now() });
+  const base = { style, provider, status: "processing", createdAt: Date.now() };
+  await jobs.setJSON(id, { ...base, progress: 5 });
 
   try {
     const images = imageStore();
@@ -73,9 +81,25 @@ export default async (req) => {
     if (!src || !src.data) throw new Error("source image not found — the upload step did not run");
     const image = Buffer.from(src.data).toString("base64");
     const mimeType = (src.metadata && src.metadata.contentType) || "image/jpeg";
+    // public URL of the source photo (Seedance image API takes image URLs, not base64)
+    const origin = process.env.URL || process.env.DEPLOY_PRIME_URL || new URL(req.url).origin;
+    const originalUrl = `${origin}/.netlify/functions/img?key=${encodeURIComponent("src/" + id)}`;
 
+    // progress: bump as each variation finishes
+    let completed = 0;
+    const bump = async () => {
+      completed++;
+      await jobs.setJSON(id, { ...base, progress: Math.min(95, 5 + Math.round((completed / count) * 90)) });
+    };
+
+    const ctx = { images, geminiKey, seedanceKey, id, image, mimeType, style, originalUrl };
     const settled = await Promise.allSettled(
-      Array.from({ length: count }, (_, i) => generateAndStore(images, geminiKey, id, image, mimeType, style, i))
+      Array.from({ length: count }, (_, i) =>
+        generateOne(provider, { ...ctx, idx: i }).then(
+          async (url) => { await bump(); return url; },
+          async (err) => { await bump(); throw err; }
+        )
+      )
     );
     const urls = settled.filter((s) => s.status === "fulfilled").map((s) => s.value);
 
@@ -84,21 +108,31 @@ export default async (req) => {
       throw new Error(firstErr ? String(firstErr.reason?.message || firstErr.reason) : "all variations failed");
     }
 
-    await jobs.setJSON(id, { style, status: "done", results: urls, result_url: urls[0], createdAt: Date.now() });
+    await jobs.setJSON(id, { ...base, status: "done", progress: 100, results: urls, result_url: urls[0] });
     await pushRecent({ style, result_url: urls[0], ts: Date.now() });
   } catch (err) {
     console.error("redesign failed:", err);
-    await jobs.setJSON(id, { style, status: "error", error: String(err.message || err).slice(0, 480) });
+    await jobs.setJSON(id, { ...base, status: "error", error: String(err.message || err).slice(0, 480) });
   }
 
   return new Response("accepted", { status: 202 });
 };
 
-// ---------------------------------------------------------------- one variation
-async function generateAndStore(images, geminiKey, id, image, mimeType, styleKey, idx) {
-  const out = await geminiRedesign(geminiKey, image, mimeType, styleKey, idx);
-  const key = `${id}/v${idx}`;
-  await images.set(key, Buffer.from(out.data, "base64"), { metadata: { contentType: out.mimeType } });
+// ---------------------------------------------------------------- one variation (provider-agnostic)
+async function generateOne(provider, ctx) {
+  const key = `${ctx.id}/v${ctx.idx}`;
+  if (provider === "seedance") {
+    const remoteUrl = await seedanceRedesign(ctx.seedanceKey, ctx.originalUrl, ctx.style, ctx.idx);
+    // download the result and persist in Blobs so it's served from our own domain
+    const r = await fetch(remoteUrl);
+    if (!r.ok) throw new Error(`Seedance image fetch ${r.status}`);
+    const bytes = Buffer.from(await r.arrayBuffer());
+    const ct = r.headers.get("content-type") || "image/png";
+    await ctx.images.set(key, bytes, { metadata: { contentType: ct } });
+  } else {
+    const out = await geminiRedesign(ctx.geminiKey, ctx.image, ctx.mimeType, ctx.style, ctx.idx);
+    await ctx.images.set(key, Buffer.from(out.data, "base64"), { metadata: { contentType: out.mimeType } });
+  }
   return `/.netlify/functions/img?key=${encodeURIComponent(key)}`;
 }
 
@@ -130,6 +164,72 @@ async function geminiRedesign(geminiKey, base64, mimeType, styleKey, idx = 0) {
   }
   return { data: inline.data, mimeType: inline.mimeType || inline.mime_type || "image/png" };
 }
+
+// ---------------------------------------------------------------- Seedance (Seedream image-to-image)
+//
+// NOTE: api.seedance2.ai publicly documents only its VIDEO API. The image
+// ("AI Image" / Seedream) endpoint is assumed here to mirror that pattern.
+// All of these can be overridden by env vars without a code change:
+//   SEEDANCE_API_BASE       (default https://api.seedance2.ai)
+//   SEEDANCE_IMAGE_ENDPOINT (default /v1/images/generations)
+//   SEEDANCE_IMAGE_MODEL    (default seedream-4-0)
+// On any mismatch the real API error is surfaced into the job's `error`.
+async function seedanceRedesign(apiKey, imageUrl, styleKey, idx) {
+  const style = STYLES[styleKey] || STYLES.minimalist;
+  const prompt = `${BASE_INSTRUCTION}\n\nTarget style — ${style.name}: ${style.prompt}\n\n${VARIATIONS[idx % VARIATIONS.length]}`;
+
+  const apiBase = process.env.SEEDANCE_API_BASE || "https://api.seedance2.ai";
+  const endpoint = process.env.SEEDANCE_IMAGE_ENDPOINT || "/v1/images/generations";
+  const model = process.env.SEEDANCE_IMAGE_MODEL || "seedream-4-0";
+
+  const submit = await fetch(apiBase + endpoint, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model,
+      input: { prompt, generation_type: "image-to-image", image_urls: [imageUrl], aspect_ratio: "adaptive" },
+    }),
+  });
+  if (!submit.ok) throw new Error(`Seedance submit ${submit.status}: ${(await submit.text()).slice(0, 300)}`);
+  const submitData = await submit.json();
+
+  // some APIs return the image synchronously; otherwise poll the task
+  const direct = extractImageUrl(submitData);
+  if (direct) return direct;
+
+  const taskId = submitData.taskId || submitData.id || submitData.task_id || submitData?.data?.id;
+  if (!taskId) throw new Error("Seedance: no image and no taskId in response: " + JSON.stringify(submitData).slice(0, 200));
+
+  for (let i = 0; i < 80; i++) {
+    await sleep(3000);
+    const st = await fetch(`${apiBase}/v1/tasks/${taskId}`, { headers: { Authorization: `Bearer ${apiKey}` } });
+    if (!st.ok) continue;
+    const sd = await st.json();
+    const status = (sd.status || sd?.data?.status || "").toLowerCase();
+    if (["completed", "succeeded", "success", "done"].includes(status)) {
+      const u = extractImageUrl(sd);
+      if (u) return u;
+      throw new Error("Seedance task completed but no image URL found: " + JSON.stringify(sd).slice(0, 200));
+    }
+    if (["failed", "error", "canceled", "cancelled"].includes(status)) {
+      throw new Error("Seedance task failed: " + JSON.stringify(sd).slice(0, 200));
+    }
+  }
+  throw new Error("Seedance task timed out");
+}
+
+function extractImageUrl(o) {
+  const arr = o?.data?.results || o?.results || o?.data?.images || o?.images || o?.output || o?.data?.output;
+  if (Array.isArray(arr) && arr.length) {
+    const f = arr[0];
+    return typeof f === "string" ? f : (f.url || f.image_url || f.imageUrl || null);
+  }
+  if (typeof o?.data?.url === "string") return o.data.url;
+  if (typeof o?.url === "string") return o.url;
+  return null;
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---------------------------------------------------------------- lookbook
 async function pushRecent(item) {
