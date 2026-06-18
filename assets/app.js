@@ -146,15 +146,7 @@ document.querySelectorAll("#countSelect .count-opt").forEach((btn) => {
   });
 });
 
-// ---- provider (model) selector ----
-document.querySelectorAll("#providerSelect .count-opt").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    state.provider = btn.dataset.provider || "google";
-    document.querySelectorAll("#providerSelect .count-opt").forEach((b) => b.classList.remove("selected"));
-    btn.classList.add("selected");
-    refreshCTA();
-  });
-});
+// (model is always Google Gemini — provider selector removed)
 
 // ============================================================
 // Tile swap
@@ -412,9 +404,11 @@ function setProgress(pct) {
 // Overlay
 // ============================================================
 function showOverlay() {
-  const modelName = state.provider === "seedance" ? "Seedance" : "Google";
-  $("overlayTitle").textContent = (state.count > 1 ? `正在生成 ${state.count} 个设计方案…` : "正在重新设计你的空间…");
-  overlayMsg.textContent = `${modelName} · ${LOADING_MSGS[0]}`;
+  const designing = !state.tilesEnabled || state.tileTargets.design;
+  $("overlayTitle").textContent = !designing
+    ? "正在更换地面瓷砖…"
+    : state.count > 1 ? `正在生成 ${state.count} 个设计方案…` : "正在重新设计你的空间…";
+  overlayMsg.textContent = LOADING_MSGS[0];
   overlayTimer.textContent = "0s";
   setProgress(0);
   overlay.hidden = false;

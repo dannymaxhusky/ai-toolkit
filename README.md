@@ -110,10 +110,13 @@ netlify dev                  # http://localhost:8888 （本地也会模拟 Blobs
 
 换砖用 Gemini 多图编辑(房间图 + 瓷砖图),因此**需要 `GEMINI_API_KEY`**(即使主设计选了 Seedance)。结果图在网格里以「原图·木纹」「设计·花砖」等标签区分。
 
-## 模型选择 & 进度条
+## 生成引擎 & 进度条
 
-生成前可切换 **Google（Gemini）** 或 **Seedance（Seedream 图生图）**,后端按所选 provider 走不同接口。
-生成过程中弹窗显示**进度条**:随耗时平滑推进,并以后台实时进度(每完成一张方案)为下限,完成时填满到 100%。
+当前 UI 只用 **Google（Gemini / Nano Banana）**——房间改造和换地砖都是「保结构的图像编辑」,Gemini 最合适,已验证可用。
+
+> 后端仍保留了一个 provider 适配层(`provider: "google" | "seedance"`)和 Seedance 适配代码,但 UI 已隐藏 Seedance 选项,因为 seedance2.ai 没有可用的图片接口、MiniMax 的图生图只是人物主体参考(不适合房间编辑)。若以后拿到可用的「保结构图生图」接口,可在 `redesign-background.mjs` 里接上并恢复选择器。
+
+生成过程中弹窗显示**进度条**:随耗时平滑推进,并以后台实时进度(每完成一张)为下限,完成时填满到 100%。
 
 ---
 
