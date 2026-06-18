@@ -9,8 +9,10 @@
 [functions]
   node_bundler = "esbuild"
 
-# Static asset caching
+# Static assets: always revalidate so a new deploy is never served stale.
+# (Assets are also versioned with ?v=N in index.html as a belt-and-suspenders
+# cache-bust for aggressive in-app webviews that ignore revalidation.)
 [[headers]]
   for = "/assets/*"
   [headers.values]
-    Cache-Control = "public, max-age=86400"
+    Cache-Control = "public, max-age=0, must-revalidate"
