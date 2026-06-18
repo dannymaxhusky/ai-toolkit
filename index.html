@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#F4EFE6" />
+  <title>Reroom · AI 室内装修设计</title>
+  <meta name="description" content="拍下你的房间，一键生成四种装修风格的设计方案。" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Hanken+Grotesk:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/assets/styles.css" />
+</head>
+<body>
+  <div class="grain" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <div class="brand">
+      <span class="brand-mark">◐</span>
+      <span class="brand-name">Reroom<span class="brand-dot">.</span></span>
+    </div>
+    <span class="brand-tag">AI 室内设计工作室</span>
+  </header>
+
+  <main class="stage">
+
+    <!-- ===== HERO / CAPTURE ===== -->
+    <section class="hero" id="captureCard">
+      <p class="eyebrow" data-reveal>01 — 拍摄 / CAPTURE</p>
+      <h1 class="display" data-reveal>
+        拍下你的房间，<br />
+        <em>重新想象</em> 它的样子。
+      </h1>
+      <p class="lede" data-reveal>
+        用手机对着房间拍一张照片，选择一种装修风格，
+        几十秒内得到同一空间的全新设计方案。
+      </p>
+
+      <label class="dropzone" id="dropzone" data-reveal>
+        <input type="file" id="fileInput" accept="image/*" capture="environment" hidden />
+        <div class="dropzone-inner" id="dropzoneInner">
+          <span class="dz-icon">⌂</span>
+          <span class="dz-title">拍照 / 上传房间照片</span>
+          <span class="dz-sub">点击调用相机，或从相册选择</span>
+        </div>
+        <img id="previewImg" class="preview" alt="房间预览" hidden />
+        <button type="button" class="retake" id="retakeBtn" hidden aria-label="重新选择">重拍 ↺</button>
+      </label>
+    </section>
+
+    <!-- ===== STYLE PICKER ===== -->
+    <section class="styles" id="styleSection">
+      <p class="eyebrow" data-reveal>02 — 选择风格 / STYLE</p>
+      <div class="style-grid" id="styleGrid">
+        <!-- cards injected by JS -->
+      </div>
+    </section>
+
+    <!-- ===== GENERATE ===== -->
+    <div class="cta-wrap">
+      <button class="generate" id="generateBtn" disabled>
+        <span class="generate-label">生成设计方案</span>
+        <span class="generate-arrow">→</span>
+      </button>
+      <p class="cta-hint" id="ctaHint">先拍一张照片，再选一种风格</p>
+    </div>
+
+    <!-- ===== RECENT ===== -->
+    <section class="recent" id="recentSection" hidden>
+      <p class="eyebrow">最近的设计 / LOOKBOOK</p>
+      <div class="recent-strip" id="recentStrip"></div>
+    </section>
+
+    <footer class="site-footer">
+      <p>由 Gemini「Nano Banana」图像模型驱动 · 设计灵感参考 ReRoom · Alcov · Interior AI</p>
+    </footer>
+  </main>
+
+  <!-- ===== PROCESSING OVERLAY ===== -->
+  <div class="overlay" id="overlay" hidden>
+    <div class="overlay-card">
+      <div class="loader"><span></span><span></span><span></span></div>
+      <p class="overlay-title" id="overlayTitle">正在重新设计你的空间…</p>
+      <p class="overlay-msg" id="overlayMsg">分析房间结构</p>
+      <p class="overlay-timer" id="overlayTimer">0s</p>
+    </div>
+  </div>
+
+  <!-- ===== RESULT MODAL ===== -->
+  <div class="result" id="resultModal" hidden>
+    <div class="result-head">
+      <span class="result-style" id="resultStyleName">设计方案</span>
+      <button class="result-close" id="resultClose" aria-label="关闭">✕</button>
+    </div>
+
+    <div class="compare" id="compare">
+      <img class="compare-after" id="afterImg" alt="设计后" />
+      <div class="compare-before-wrap" id="beforeWrap">
+        <img class="compare-before" id="beforeImg" alt="设计前" />
+        <span class="compare-tag tag-before">原图</span>
+      </div>
+      <span class="compare-tag tag-after">设计后</span>
+      <div class="compare-handle" id="compareHandle">
+        <span class="handle-grip">⇆</span>
+      </div>
+    </div>
+    <p class="compare-hint">← 左右拖动对比 →</p>
+
+    <div class="result-actions">
+      <a class="btn btn-ghost" id="downloadBtn" download="reroom-design.png">下载图片</a>
+      <button class="btn btn-solid" id="againBtn">换一种风格</button>
+    </div>
+  </div>
+
+  <script src="/assets/app.js" type="module"></script>
+</body>
+</html>
