@@ -1,11 +1,14 @@
 {
   "name": "reroom-ai-interior",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "Mobile-first AI interior redesign — capture a room, pick a style, get a redesign.",
   "type": "commonjs",
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "@netlify/blobs": "^10.7.0"
   },
   "scripts": {
     "dev": "netlify dev"
