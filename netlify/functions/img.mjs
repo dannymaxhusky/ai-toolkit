@@ -7,11 +7,11 @@ export default async (req) => {
 
   try {
     const images = getStore({ name: "images", consistency: "strong" });
-    const { data, metadata } = await images.getWithMetadata(key, { type: "arrayBuffer" });
-    if (!data) return new Response("not found", { status: 404 });
-    return new Response(data, {
+    const res = await images.getWithMetadata(key, { type: "arrayBuffer" });
+    if (!res || !res.data) return new Response("not found", { status: 404 });
+    return new Response(res.data, {
       headers: {
-        "Content-Type": (metadata && metadata.contentType) || "image/png",
+        "Content-Type": (res.metadata && res.metadata.contentType) || "image/png",
         "Cache-Control": "public, max-age=31536000, immutable",
       },
     });

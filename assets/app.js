@@ -198,10 +198,19 @@ async function startGeneration() {
   showOverlay();
 
   try {
+    // 1. upload the photo via a normal function (handles large bodies)
+    const up = await fetch("/.netlify/functions/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: jobId, image: state.imageB64, mimeType: state.mimeType }),
+    });
+    if (!up.ok) throw new Error(`上传失败 (HTTP ${up.status})`);
+
+    // 2. trigger the background job with just the id (tiny payload)
     const kick = await fetch("/.netlify/functions/redesign-background", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: jobId, style: state.style, image: state.imageB64, mimeType: state.mimeType, count: state.count }),
+      body: JSON.stringify({ id: jobId, style: state.style, count: state.count }),
     });
     // Background functions reply 202. Anything 5xx/404 means it isn't deployed.
     if (kick.status >= 400 && kick.status !== 202) {

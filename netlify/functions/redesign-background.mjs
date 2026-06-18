@@ -51,11 +51,11 @@ export default async (req) => {
   let body;
   try { body = await req.json(); } catch { return new Response("bad json", { status: 400 }); }
 
-  const { id, style, image, mimeType } = body;
+  const { id, style } = body;
   const count = Math.min(Math.max(parseInt(body.count, 10) || 1, 1), 4);
   const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY || process.env.GOOGLE_API_KEY;
 
-  if (!id || !style || !image) return new Response("missing fields", { status: 400 });
+  if (!id || !style) return new Response("missing fields", { status: 400 });
 
   const jobs = jobsStore();
   if (!geminiKey) {
@@ -67,8 +67,15 @@ export default async (req) => {
 
   try {
     const images = imageStore();
+
+    // read the source photo the client uploaded via the `upload` function
+    const src = await images.getWithMetadata(`src/${id}`, { type: "arrayBuffer" });
+    if (!src || !src.data) throw new Error("source image not found — the upload step did not run");
+    const image = Buffer.from(src.data).toString("base64");
+    const mimeType = (src.metadata && src.metadata.contentType) || "image/jpeg";
+
     const settled = await Promise.allSettled(
-      Array.from({ length: count }, (_, i) => generateAndStore(images, geminiKey, id, image, mimeType || "image/jpeg", style, i))
+      Array.from({ length: count }, (_, i) => generateAndStore(images, geminiKey, id, image, mimeType, style, i))
     );
     const urls = settled.filter((s) => s.status === "fulfilled").map((s) => s.value);
 
