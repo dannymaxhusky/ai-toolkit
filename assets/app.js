@@ -529,17 +529,46 @@ async function loadRecent() {
     rows.forEach((r) => {
       const url = r.url || r.result_url; // tolerate old entries
       if (!url) return;
-      const cell = document.createElement("button");
-      cell.type = "button";
+      const cell = document.createElement("div");
       cell.className = "recent-cell";
       cell.innerHTML = `<img src="${url}" loading="lazy" alt="${r.label || "设计"}" />` +
-        (r.label ? `<span class="recent-label">${r.label}</span>` : "");
+        (r.label ? `<span class="recent-label">${r.label}</span>` : "") +
+        `<button type="button" class="recent-del" aria-label="删除">✕</button>`;
       cell.addEventListener("click", () => reopenFromRecent({ ...r, url }));
+      cell.querySelector(".recent-del").addEventListener("click", (e) => {
+        e.stopPropagation();
+        deleteRecent(url, cell);
+      });
       strip.appendChild(cell);
     });
     $("recentSection").hidden = false;
   } catch (_) { /* silent */ }
 }
+
+async function deleteRecent(url, cell) {
+  cell.remove();
+  if (!$("recentStrip").children.length) $("recentSection").hidden = true;
+  try {
+    await fetch("/.netlify/functions/history", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delete", url }),
+    });
+  } catch (_) { /* the UI already updated */ }
+}
+
+$("recentClear").addEventListener("click", async () => {
+  if (!confirm("清空全部历史记录？此操作不可恢复。")) return;
+  $("recentStrip").innerHTML = "";
+  $("recentSection").hidden = true;
+  try {
+    await fetch("/.netlify/functions/history", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "clear" }),
+    });
+  } catch (_) { /* ignore */ }
+});
 
 // reopen a past result straight from history — no regeneration
 function reopenFromRecent(r) {
