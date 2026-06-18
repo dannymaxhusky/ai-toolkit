@@ -91,7 +91,7 @@ const TILE_PRESETS = [
 
 const state = {
   imageB64: null, mimeType: "image/jpeg", previewUrl: null,
-  style: null, count: 4, provider: "google",
+  style: null, count: 4, provider: "google", economy: true,
   tilesEnabled: false, selectedTiles: [], tileTargets: { design: true, original: true },
 };
 
@@ -147,6 +147,16 @@ document.querySelectorAll("#countSelect .count-opt").forEach((btn) => {
 });
 
 // (model is always Google Gemini — provider selector removed)
+
+// ---- quality / cost selector (economy = cheaper 2.5 Flash, hd = NB2) ----
+document.querySelectorAll("#qualitySelect .count-opt").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    state.economy = btn.dataset.quality === "economy";
+    document.querySelectorAll("#qualitySelect .count-opt").forEach((b) => b.classList.remove("selected"));
+    btn.classList.add("selected");
+    refreshCTA();
+  });
+});
 
 // ============================================================
 // Tile swap
@@ -230,7 +240,7 @@ $("tileFileInput").addEventListener("change", async (e) => {
 fileInput.addEventListener("change", async (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
-  const resized = await resizeImage(file, 1280, 0.82);
+  const resized = await resizeImage(file, 1024, 0.82);
   state.imageB64 = resized.base64;
   state.mimeType = "image/jpeg";
   state.previewUrl = resized.dataUrl;
@@ -330,7 +340,7 @@ async function startGeneration() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        id: jobId, style: state.style, count: state.count, provider: state.provider,
+        id: jobId, style: state.style, count: state.count, provider: state.provider, economy: state.economy,
         tilesEnabled: state.tilesEnabled, tiles, tileTargets: state.tileTargets,
       }),
     });

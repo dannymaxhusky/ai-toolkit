@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Hanken+Grotesk:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/assets/styles.css?v=7" />
+  <link rel="stylesheet" href="/assets/styles.css?v=8" />
 </head>
 <body>
   <div class="grain" aria-hidden="true"></div>
@@ -86,6 +86,10 @@
 
     <!-- ===== GENERATE ===== -->
     <div class="cta-wrap">
+      <div class="count-select" id="qualitySelect" role="group" aria-label="画质与成本">
+        <button type="button" class="count-opt selected" data-quality="economy">经济<span class="seg-sub">省钱 · 2.5</span></button>
+        <button type="button" class="count-opt" data-quality="hd">高清<span class="seg-sub">NB2</span></button>
+      </div>
       <div class="count-select" id="countSelect" role="group" aria-label="生成数量">
         <button type="button" class="count-opt" data-count="1">1 张</button>
         <button type="button" class="count-opt selected" data-count="4">4 张方案</button>
@@ -160,6 +164,6 @@
     </div>
   </div>
 
-  <script src="/assets/app.js?v=7" type="module"></script>
+  <script src="/assets/app.js?v=8" type="module"></script>
 </body>
 </html>

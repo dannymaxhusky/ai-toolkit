@@ -57,6 +57,9 @@ export default async (req) => {
   const { id, style } = body;
   const count = Math.min(Math.max(parseInt(body.count, 10) || 1, 1), 4);
   const provider = body.provider === "seedance" ? "seedance" : "google";
+  // economy = cheaper original Nano Banana (2.5 Flash); hd = Nano Banana 2
+  const economy = !!body.economy;
+  const designModel = economy ? "gemini-2.5-flash-image" : MODEL;
   const tilesEnabled = !!body.tilesEnabled;
   const tiles = Array.isArray(body.tiles) ? body.tiles.slice(0, 4) : [];
   const tt = body.tileTargets || {};
@@ -107,7 +110,7 @@ export default async (req) => {
 
     // ---- phase 1: base redesign ----
     if (needDesign) {
-      const ctx = { images, geminiKey, seedanceKey, id, image, mimeType, style, originalUrl };
+      const ctx = { images, geminiKey, seedanceKey, id, image, mimeType, style, originalUrl, model: designModel };
       const settled = await Promise.allSettled(
         Array.from({ length: count }, (_, i) =>
           generateOne(provider, { ...ctx, idx: i }).then(
@@ -134,7 +137,7 @@ export default async (req) => {
       resolved.forEach((tile, ti) => {
         if (tileTargets.original) {
           swapTasks.push((async () => {
-            const out = await geminiFloorSwap(geminiKey, image, mimeType, tile.base64, tile.mime);
+            const out = await geminiFloorSwap(geminiKey, image, mimeType, tile.base64, tile.mime, designModel);
             const key = `${id}/t-orig-${ti}`;
             await images.set(key, Buffer.from(out.data, "base64"), { metadata: { contentType: out.mimeType } });
             await bump();
@@ -143,7 +146,7 @@ export default async (req) => {
         }
         if (tileTargets.design && coverB64) {
           swapTasks.push((async () => {
-            const out = await geminiFloorSwap(geminiKey, coverB64, coverMime, tile.base64, tile.mime);
+            const out = await geminiFloorSwap(geminiKey, coverB64, coverMime, tile.base64, tile.mime, designModel);
             const key = `${id}/t-des-${ti}`;
             await images.set(key, Buffer.from(out.data, "base64"), { metadata: { contentType: out.mimeType } });
             await bump();
@@ -180,18 +183,18 @@ async function generateOne(provider, ctx) {
     const ct = r.headers.get("content-type") || "image/png";
     await ctx.images.set(key, bytes, { metadata: { contentType: ct } });
   } else {
-    const out = await geminiRedesign(ctx.geminiKey, ctx.image, ctx.mimeType, ctx.style, ctx.idx);
+    const out = await geminiRedesign(ctx.geminiKey, ctx.image, ctx.mimeType, ctx.style, ctx.idx, ctx.model);
     await ctx.images.set(key, Buffer.from(out.data, "base64"), { metadata: { contentType: out.mimeType } });
   }
   return `/.netlify/functions/img?key=${encodeURIComponent(key)}`;
 }
 
 // ---------------------------------------------------------------- Gemini
-async function geminiRedesign(geminiKey, base64, mimeType, styleKey, idx = 0) {
+async function geminiRedesign(geminiKey, base64, mimeType, styleKey, idx = 0, model = MODEL) {
   const style = STYLES[styleKey] || STYLES.minimalist;
   const variation = VARIATIONS[idx % VARIATIONS.length];
   const prompt = `${BASE_INSTRUCTION}\n\nTarget style — ${style.name}: ${style.prompt}\n\n${variation}`;
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${geminiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
 
   const res = await fetch(url, {
     method: "POST",
@@ -295,14 +298,14 @@ async function resolveTile(t, origin, images) {
   return { name: t.name || t.id, base64: buf.toString("base64"), mime: r.headers.get("content-type") || "image/jpeg" };
 }
 
-async function geminiFloorSwap(geminiKey, roomB64, roomMime, tileB64, tileMime) {
+async function geminiFloorSwap(geminiKey, roomB64, roomMime, tileB64, tileMime, model = MODEL) {
   const prompt =
     "You are given two images. IMAGE 1 is a photo of a room interior. IMAGE 2 is a flooring / floor-tile sample. " +
     "Replace ONLY the floor in IMAGE 1 with the flooring shown in IMAGE 2, laid across the floor with realistic " +
     "perspective, scale, lighting and subtle reflections. Keep EVERYTHING ELSE identical — walls, ceiling, windows, " +
     "doors, furniture, decor, objects, camera angle and composition must NOT change. " +
     "Output a photorealistic image of the same room with only the floor changed.";
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${geminiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
