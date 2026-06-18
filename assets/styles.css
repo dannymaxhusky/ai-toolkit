@@ -154,6 +154,46 @@ body {
 }
 .style-card.selected .sc-check { opacity: 1; transform: scale(1); }
 
+/* ---------- tile swap ---------- */
+.tiles-sec { margin-bottom: 36px; }
+.tile-detail { margin-top: 16px; }
+.tile-label { font-size: 13px; color: var(--ink-soft); margin: 18px 0 10px; }
+.tile-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+.tile-cell {
+  position: relative; width: 84px; height: 84px; flex: none; padding: 0;
+  border-radius: 14px; overflow: hidden; cursor: pointer;
+  border: 1.5px solid var(--line); background: var(--card);
+  transition: border-color .18s, box-shadow .18s, transform .15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.tile-cell:active { transform: scale(.96); }
+.tile-cell img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tile-cell.selected { border-color: var(--clay); box-shadow: 0 0 0 3px rgba(184,92,56,.16); }
+.tile-cell .tile-name {
+  position: absolute; left: 0; right: 0; bottom: 0; font-size: 9.5px; text-align: center;
+  color: #fff; background: rgba(33,28,22,.5); padding: 3px 2px; letter-spacing: .02em;
+}
+.tile-cell .tile-check {
+  position: absolute; top: 5px; right: 5px; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--clay); color: #fff; display: grid; place-items: center; font-size: 12px;
+  opacity: 0; transform: scale(.5); transition: .15s;
+}
+.tile-cell.selected .tile-check { opacity: 1; transform: scale(1); }
+.tile-upload {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  border-style: dashed; color: var(--ink-soft);
+}
+.tile-upload .tu-icon { font-size: 22px; color: var(--clay); line-height: 1; }
+.tile-upload .tu-text { font-size: 11px; }
+.tile-targets { display: flex; gap: 10px; }
+.target-chip {
+  flex: 1; font-family: var(--sans); font-size: 14px; font-weight: 600; padding: 13px;
+  border-radius: 100px; cursor: pointer; border: 1.5px solid var(--line);
+  background: var(--card); color: var(--ink-soft); transition: .18s;
+  -webkit-tap-highlight-color: transparent;
+}
+.target-chip.selected { border-color: var(--clay); background: var(--clay); color: #fff; }
+
 /* ---------- CTA ---------- */
 .cta-wrap {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 18;

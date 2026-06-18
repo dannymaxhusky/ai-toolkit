@@ -13,13 +13,15 @@ export default async (req) => {
 
   const { id, image, mimeType } = body;
   if (!id || !image) return json({ error: "missing fields" }, 400);
+  // optional key override (used for tile uploads, e.g. "tile/<id>/0"); default = room photo
+  const key = typeof body.key === "string" && body.key ? body.key : `src/${id}`;
 
   try {
     const images = getStore({ name: "images", consistency: "strong" });
-    await images.set(`src/${id}`, Buffer.from(image, "base64"), {
+    await images.set(key, Buffer.from(image, "base64"), {
       metadata: { contentType: mimeType || "image/jpeg" },
     });
-    return json({ ok: true });
+    return json({ ok: true, key });
   } catch (err) {
     return json({ error: String(err.message || err) }, 500);
   }

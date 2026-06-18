@@ -57,18 +57,26 @@ export default async (req) => {
   const { id, style } = body;
   const count = Math.min(Math.max(parseInt(body.count, 10) || 1, 1), 4);
   const provider = body.provider === "seedance" ? "seedance" : "google";
+  const tilesEnabled = !!body.tilesEnabled;
+  const tiles = Array.isArray(body.tiles) ? body.tiles.slice(0, 4) : [];
+  const tt = body.tileTargets || {};
+  const tileTargets = { design: !!tt.design, original: !!tt.original };
+  const needDesign = !tilesEnabled || tileTargets.design; // floor-swap-only-on-original skips the restyle
   const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY || process.env.GOOGLE_API_KEY;
   const seedanceKey = process.env.SEEDANCE_API_KEY;
 
-  if (!id || !style) return new Response("missing fields", { status: 400 });
+  if (!id) return new Response("missing id", { status: 400 });
+  if (needDesign && !style) return new Response("missing style", { status: 400 });
 
   const jobs = jobsStore();
   const fail = async (msg) => {
     await jobs.setJSON(id, { style, provider, status: "error", error: msg });
     return new Response("not configured", { status: 500 });
   };
-  if (provider === "google" && !geminiKey) return fail("GEMINI_API_KEY not set on the site");
-  if (provider === "seedance" && !seedanceKey) return fail("SEEDANCE_API_KEY not set on the site");
+  const willSwapTiles = tilesEnabled && tiles.length && (tileTargets.design || tileTargets.original);
+  // tile swaps always use Gemini (multi-image edit); base redesign uses the chosen provider
+  if (((needDesign && provider === "google") || willSwapTiles) && !geminiKey) return fail("GEMINI_API_KEY not set on the site");
+  if (needDesign && provider === "seedance" && !seedanceKey) return fail("SEEDANCE_API_KEY not set on the site");
 
   const base = { style, provider, status: "processing", createdAt: Date.now() };
   await jobs.setJSON(id, { ...base, progress: 5 });
@@ -85,31 +93,72 @@ export default async (req) => {
     const origin = process.env.URL || process.env.DEPLOY_PRIME_URL || new URL(req.url).origin;
     const originalUrl = `${origin}/.netlify/functions/img?key=${encodeURIComponent("src/" + id)}`;
 
-    // progress: bump as each variation finishes
+    // progress across both phases
+    const swapPerTile = (tileTargets.original ? 1 : 0) + (tileTargets.design ? 1 : 0);
+    const totalSteps = (needDesign ? count : 0) + (willSwapTiles ? tiles.length * swapPerTile : 0) || 1;
     let completed = 0;
     const bump = async () => {
       completed++;
-      await jobs.setJSON(id, { ...base, progress: Math.min(95, 5 + Math.round((completed / count) * 90)) });
+      await jobs.setJSON(id, { ...base, progress: Math.min(95, 5 + Math.round((completed / totalSteps) * 90)) });
     };
 
-    const ctx = { images, geminiKey, seedanceKey, id, image, mimeType, style, originalUrl };
-    const settled = await Promise.allSettled(
-      Array.from({ length: count }, (_, i) =>
-        generateOne(provider, { ...ctx, idx: i }).then(
-          async (url) => { await bump(); return url; },
-          async (err) => { await bump(); throw err; }
-        )
-      )
-    );
-    const urls = settled.filter((s) => s.status === "fulfilled").map((s) => s.value);
+    const results = []; // [{ url, label }]
+    let coverB64 = null, coverMime = "image/png";
 
-    if (!urls.length) {
-      const firstErr = settled.find((s) => s.status === "rejected");
-      throw new Error(firstErr ? String(firstErr.reason?.message || firstErr.reason) : "all variations failed");
+    // ---- phase 1: base redesign ----
+    if (needDesign) {
+      const ctx = { images, geminiKey, seedanceKey, id, image, mimeType, style, originalUrl };
+      const settled = await Promise.allSettled(
+        Array.from({ length: count }, (_, i) =>
+          generateOne(provider, { ...ctx, idx: i }).then(
+            async (url) => { await bump(); return url; },
+            async (err) => { await bump(); throw err; }
+          )
+        )
+      );
+      const urls = settled.filter((s) => s.status === "fulfilled").map((s) => s.value);
+      if (!urls.length) {
+        const firstErr = settled.find((s) => s.status === "rejected");
+        throw new Error(firstErr ? String(firstErr.reason?.message || firstErr.reason) : "all variations failed");
+      }
+      urls.forEach((u, i) => results.push({ url: u, label: count > 1 ? `设计 ${i + 1}` : "设计方案" }));
+      // cover design bytes (for applying tiles to the design)
+      const cov = await images.getWithMetadata(`${id}/v0`, { type: "arrayBuffer" });
+      if (cov && cov.data) { coverB64 = Buffer.from(cov.data).toString("base64"); coverMime = (cov.metadata && cov.metadata.contentType) || "image/png"; }
     }
 
-    await jobs.setJSON(id, { ...base, status: "done", progress: 100, results: urls, result_url: urls[0] });
-    await pushRecent({ style, result_url: urls[0], ts: Date.now() });
+    // ---- phase 2: floor-tile swaps (always via Gemini multi-image edit) ----
+    if (willSwapTiles) {
+      const resolved = await Promise.all(tiles.map((t) => resolveTile(t, origin, images)));
+      const swapTasks = [];
+      resolved.forEach((tile, ti) => {
+        if (tileTargets.original) {
+          swapTasks.push((async () => {
+            const out = await geminiFloorSwap(geminiKey, image, mimeType, tile.base64, tile.mime);
+            const key = `${id}/t-orig-${ti}`;
+            await images.set(key, Buffer.from(out.data, "base64"), { metadata: { contentType: out.mimeType } });
+            await bump();
+            return { url: `/.netlify/functions/img?key=${encodeURIComponent(key)}`, label: `原图·${tile.name}` };
+          })());
+        }
+        if (tileTargets.design && coverB64) {
+          swapTasks.push((async () => {
+            const out = await geminiFloorSwap(geminiKey, coverB64, coverMime, tile.base64, tile.mime);
+            const key = `${id}/t-des-${ti}`;
+            await images.set(key, Buffer.from(out.data, "base64"), { metadata: { contentType: out.mimeType } });
+            await bump();
+            return { url: `/.netlify/functions/img?key=${encodeURIComponent(key)}`, label: `设计·${tile.name}` };
+          })());
+        }
+      });
+      const swapSettled = await Promise.allSettled(swapTasks);
+      swapSettled.forEach((s) => { if (s.status === "fulfilled") results.push(s.value); });
+    }
+
+    if (!results.length) throw new Error("no images produced");
+
+    await jobs.setJSON(id, { ...base, status: "done", progress: 100, results, result_url: results[0].url });
+    await pushRecent({ style: style || "tiles", result_url: results[0].url, ts: Date.now() });
   } catch (err) {
     console.error("redesign failed:", err);
     await jobs.setJSON(id, { ...base, status: "error", error: String(err.message || err).slice(0, 480) });
@@ -230,6 +279,49 @@ function extractImageUrl(o) {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// ---------------------------------------------------------------- floor-tile swap (Gemini multi-image)
+async function resolveTile(t, origin, images) {
+  if (t && t.type === "upload" && t.key) {
+    const blob = await images.getWithMetadata(t.key, { type: "arrayBuffer" });
+    if (!blob || !blob.data) throw new Error(`uploaded tile not found: ${t.key}`);
+    return { name: t.name || "自定义", base64: Buffer.from(blob.data).toString("base64"), mime: (blob.metadata && blob.metadata.contentType) || "image/jpeg" };
+  }
+  // preset — served as a static asset
+  const r = await fetch(`${origin}/assets/tiles/${t.id}.jpg`);
+  if (!r.ok) throw new Error(`tile preset ${t.id} fetch ${r.status}`);
+  const buf = Buffer.from(await r.arrayBuffer());
+  return { name: t.name || t.id, base64: buf.toString("base64"), mime: r.headers.get("content-type") || "image/jpeg" };
+}
+
+async function geminiFloorSwap(geminiKey, roomB64, roomMime, tileB64, tileMime) {
+  const prompt =
+    "You are given two images. IMAGE 1 is a photo of a room interior. IMAGE 2 is a flooring / floor-tile sample. " +
+    "Replace ONLY the floor in IMAGE 1 with the flooring shown in IMAGE 2, laid across the floor with realistic " +
+    "perspective, scale, lighting and subtle reflections. Keep EVERYTHING ELSE identical — walls, ceiling, windows, " +
+    "doors, furniture, decor, objects, camera angle and composition must NOT change. " +
+    "Output a photorealistic image of the same room with only the floor changed.";
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${geminiKey}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ parts: [
+        { inlineData: { mimeType: roomMime, data: roomB64 } },
+        { inlineData: { mimeType: tileMime, data: tileB64 } },
+        { text: prompt },
+      ] }],
+      generationConfig: { responseModalities: ["IMAGE"] },
+    }),
+  });
+  if (!res.ok) throw new Error(`Gemini tile ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  const data = await res.json();
+  const parts = data?.candidates?.[0]?.content?.parts || [];
+  const ip = parts.find((p) => p.inlineData || p.inline_data);
+  const inline = ip?.inlineData || ip?.inline_data;
+  if (!inline?.data) throw new Error("Gemini tile: no image (" + (data?.candidates?.[0]?.finishReason || "?") + ")");
+  return { data: inline.data, mimeType: inline.mimeType || inline.mime_type || "image/png" };
+}
 
 // ---------------------------------------------------------------- lookbook
 async function pushRecent(item) {

@@ -80,7 +80,20 @@ const LOADING_MSGS = [
 ];
 
 // ---- state ----
-const state = { imageB64: null, mimeType: "image/jpeg", previewUrl: null, style: null, count: 4, provider: "google" };
+const TILE_PRESETS = [
+  { id: "marble", name: "大理石" },
+  { id: "herringbone", name: "木纹" },
+  { id: "hexagon", name: "六角砖" },
+  { id: "terrazzo", name: "水磨石" },
+  { id: "concrete", name: "灰砖" },
+  { id: "encaustic", name: "花砖" },
+];
+
+const state = {
+  imageB64: null, mimeType: "image/jpeg", previewUrl: null,
+  style: null, count: 4, provider: "google",
+  tilesEnabled: false, selectedTiles: [], tileTargets: { design: true, original: true },
+};
 
 // ---- elements ----
 const $ = (id) => document.getElementById(id);
@@ -144,6 +157,82 @@ document.querySelectorAll("#providerSelect .count-opt").forEach((btn) => {
 });
 
 // ============================================================
+// Tile swap
+// ============================================================
+const MAX_TILES = 4;
+const tileGrid = $("tileGrid");
+const tileUploadEl = $("tileUpload");
+
+// render preset swatches before the upload tile
+TILE_PRESETS.forEach((t) => {
+  const cell = document.createElement("button");
+  cell.type = "button";
+  cell.className = "tile-cell";
+  cell.dataset.tile = t.id;
+  cell.innerHTML = `<img src="/assets/tiles/${t.id}.jpg" alt="${t.name}" loading="lazy" /><span class="tile-name">${t.name}</span><span class="tile-check">✓</span>`;
+  cell.addEventListener("click", () => togglePreset(t, cell));
+  tileGrid.insertBefore(cell, tileUploadEl);
+});
+
+function togglePreset(t, cell) {
+  const i = state.selectedTiles.findIndex((x) => x.type === "preset" && x.id === t.id);
+  if (i >= 0) {
+    state.selectedTiles.splice(i, 1);
+    cell.classList.remove("selected");
+  } else {
+    if (state.selectedTiles.length >= MAX_TILES) { alert(`最多选择 ${MAX_TILES} 种瓷砖`); return; }
+    state.selectedTiles.push({ type: "preset", id: t.id, name: t.name });
+    cell.classList.add("selected");
+  }
+  refreshCTA();
+}
+
+// tile on/off toggle
+document.querySelectorAll("#tileToggle .count-opt").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    state.tilesEnabled = btn.dataset.tiles === "on";
+    document.querySelectorAll("#tileToggle .count-opt").forEach((b) => b.classList.remove("selected"));
+    btn.classList.add("selected");
+    $("tileDetail").hidden = !state.tilesEnabled;
+    refreshCTA();
+  });
+});
+
+// target chips (multi-select)
+document.querySelectorAll("#tileTargets .target-chip").forEach((chip) => {
+  chip.addEventListener("click", () => {
+    const k = chip.dataset.target;
+    state.tileTargets[k] = !state.tileTargets[k];
+    chip.classList.toggle("selected", state.tileTargets[k]);
+    refreshCTA();
+  });
+});
+
+// upload custom tiles
+$("tileFileInput").addEventListener("change", async (e) => {
+  const files = [...(e.target.files || [])];
+  for (const f of files) {
+    if (state.selectedTiles.length >= MAX_TILES) { alert(`最多选择 ${MAX_TILES} 种瓷砖`); break; }
+    const r = await resizeImage(f, 640, 0.85);
+    const entry = { type: "upload", name: "自定义", base64: r.base64 };
+    state.selectedTiles.push(entry);
+    const cell = document.createElement("button");
+    cell.type = "button";
+    cell.className = "tile-cell selected";
+    cell.innerHTML = `<img src="${r.dataUrl}" alt="自定义瓷砖" /><span class="tile-name">自定义</span><span class="tile-check">✓</span>`;
+    cell.addEventListener("click", () => {
+      const idx = state.selectedTiles.indexOf(entry);
+      if (idx >= 0) state.selectedTiles.splice(idx, 1);
+      cell.remove();
+      refreshCTA();
+    });
+    tileGrid.insertBefore(cell, tileUploadEl);
+  }
+  e.target.value = "";
+  refreshCTA();
+});
+
+// ============================================================
 // Image capture + client-side resize (keeps payload small)
 // ============================================================
 fileInput.addEventListener("change", async (e) => {
@@ -191,11 +280,19 @@ function resizeImage(file, maxDim, quality) {
 // CTA gating
 // ============================================================
 function refreshCTA() {
-  const ready = state.imageB64 && state.style;
+  const needDesign = !state.tilesEnabled || state.tileTargets.design;
+  const hasTarget = state.tileTargets.design || state.tileTargets.original;
+  let ready = !!state.imageB64;
+  if (needDesign) ready = ready && !!state.style;
+  if (state.tilesEnabled) ready = ready && state.selectedTiles.length > 0 && hasTarget;
   generateBtn.disabled = !ready;
-  if (ready) ctaHint.textContent = state.count > 1 ? `生成 ${state.count} 个方案 · 约需 30–60 秒` : "约需 20–40 秒生成";
-  else if (!state.imageB64) ctaHint.textContent = "先拍一张照片，再选一种风格";
-  else ctaHint.textContent = "选择一种装修风格";
+
+  if (!state.imageB64) ctaHint.textContent = "先拍一张照片";
+  else if (state.tilesEnabled && state.selectedTiles.length === 0) ctaHint.textContent = "请选择至少一种瓷砖图案";
+  else if (state.tilesEnabled && !hasTarget) ctaHint.textContent = "请选择瓷砖应用到哪里";
+  else if (needDesign && !state.style) ctaHint.textContent = "选择一种装修风格";
+  else if (!needDesign) ctaHint.textContent = "仅在原图上更换地砖 · 约需 20–40 秒";
+  else ctaHint.textContent = state.count > 1 ? `生成 ${state.count} 个方案 · 约 30–60 秒` : "约需 20–40 秒生成";
 }
 
 // ============================================================
@@ -216,11 +313,34 @@ async function startGeneration() {
     });
     if (!up.ok) throw new Error(`上传失败 (HTTP ${up.status})`);
 
-    // 2. trigger the background job with just the id (tiny payload)
+    // 1b. upload any custom tile images, build the tiles payload
+    const tiles = [];
+    if (state.tilesEnabled) {
+      let ui = 0;
+      for (const t of state.selectedTiles) {
+        if (t.type === "preset") {
+          tiles.push({ type: "preset", id: t.id, name: t.name });
+        } else {
+          const key = `tile/${jobId}/${ui++}`;
+          const tu = await fetch("/.netlify/functions/upload", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: jobId, key, image: t.base64, mimeType: "image/jpeg" }),
+          });
+          if (!tu.ok) throw new Error(`瓷砖上传失败 (HTTP ${tu.status})`);
+          tiles.push({ type: "upload", key, name: "自定义" });
+        }
+      }
+    }
+
+    // 2. trigger the background job with just the ids (tiny payload)
     const kick = await fetch("/.netlify/functions/redesign-background", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: jobId, style: state.style, count: state.count, provider: state.provider }),
+      body: JSON.stringify({
+        id: jobId, style: state.style, count: state.count, provider: state.provider,
+        tilesEnabled: state.tilesEnabled, tiles, tileTargets: state.tileTargets,
+      }),
     });
     // Background functions reply 202. Anything 5xx/404 means it isn't deployed.
     if (kick.status >= 400 && kick.status !== 202) {
@@ -307,30 +427,33 @@ function hideOverlay() { overlay.hidden = true; }
 function showResult(row) {
   const meta = STYLES.find((s) => s.key === row.style);
   $("resultStyleName").textContent = meta ? meta.name : "设计方案";
-  const urls = Array.isArray(row.results) && row.results.length
+  // results may be strings (older jobs) or { url, label } objects
+  let items = (Array.isArray(row.results) && row.results.length
     ? row.results
-    : row.result_url ? [row.result_url] : [];
-  if (!urls.length) return;
+    : row.result_url ? [row.result_url] : []
+  ).map((r) => (typeof r === "string" ? { url: r, label: "" } : r));
+  if (!items.length) return;
   resultModal.hidden = false;
   $("resultBack").hidden = true;
-  if (urls.length > 1) {
-    buildGrid(urls);
+  if (items.length > 1) {
+    buildGrid(items);
     showPane("grid");
   } else {
-    openCompare(urls[0]);
+    openCompare(items[0].url);
   }
 }
 
-function buildGrid(urls) {
+function buildGrid(items) {
   const grid = $("resultGrid");
   grid.innerHTML = "";
-  urls.forEach((u, i) => {
+  items.forEach((it, i) => {
+    const label = it.label || `方案 ${i + 1}`;
     const cell = document.createElement("button");
     cell.type = "button";
     cell.className = "grid-cell";
-    cell.innerHTML = `<img src="${u}" alt="方案 ${i + 1}" loading="lazy" /><span class="cell-no">方案 ${i + 1}</span>`;
+    cell.innerHTML = `<img src="${it.url}" alt="${label}" loading="lazy" /><span class="cell-no">${label}</span>`;
     cell.addEventListener("click", () => {
-      openCompare(u);
+      openCompare(it.url);
       $("resultBack").hidden = false;
     });
     grid.appendChild(cell);

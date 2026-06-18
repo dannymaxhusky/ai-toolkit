@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Hanken+Grotesk:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/assets/styles.css?v=3" />
+  <link rel="stylesheet" href="/assets/styles.css?v=4" />
 </head>
 <body>
   <div class="grain" aria-hidden="true"></div>
@@ -49,9 +49,36 @@
       </label>
     </section>
 
+    <!-- ===== TILE SWAP ===== -->
+    <section class="tiles-sec" id="tileSection">
+      <p class="eyebrow">02 — 地面瓷砖 / TILES</p>
+      <div class="count-select" id="tileToggle" role="group" aria-label="是否更换地面瓷砖">
+        <button type="button" class="count-opt selected" data-tiles="off">不换瓷砖</button>
+        <button type="button" class="count-opt" data-tiles="on">更换地砖</button>
+      </div>
+
+      <div class="tile-detail" id="tileDetail" hidden>
+        <p class="tile-label">选择瓷砖图案 · 可多选（最多 4 种）</p>
+        <div class="tile-grid" id="tileGrid">
+          <!-- preset swatches injected by JS, then the upload tile -->
+          <label class="tile-cell tile-upload" id="tileUpload">
+            <input type="file" id="tileFileInput" accept="image/*" multiple hidden />
+            <span class="tu-icon">＋</span>
+            <span class="tu-text">上传瓷砖</span>
+          </label>
+        </div>
+
+        <p class="tile-label">应用到 · 可多选</p>
+        <div class="tile-targets" id="tileTargets">
+          <button type="button" class="target-chip selected" data-target="design">新装修设计</button>
+          <button type="button" class="target-chip selected" data-target="original">原始照片</button>
+        </div>
+      </div>
+    </section>
+
     <!-- ===== STYLE PICKER ===== -->
     <section class="styles" id="styleSection">
-      <p class="eyebrow" data-reveal>02 — 选择风格 / STYLE</p>
+      <p class="eyebrow" data-reveal>03 — 选择风格 / STYLE</p>
       <div class="style-grid" id="styleGrid">
         <!-- cards injected by JS -->
       </div>
@@ -134,6 +161,6 @@
     </div>
   </div>
 
-  <script src="/assets/app.js?v=3" type="module"></script>
+  <script src="/assets/app.js?v=4" type="module"></script>
 </body>
 </html>
